@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>美客多 · 销售看板</title>
+<style>
+:root {
+  --bg: #0a0e14; --card: #121826; --border: #1f2a3d;
+  --text: #d8e0ee; --dim: #6b7a94; --yellow: #ffd93d; --orange: #ff9f43; --green: #00ff88;
+  --mono: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--text); font-family: -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  min-height: 100vh; padding: 16px 14px 32px;
+}
+.wrap { max-width: 520px; margin: 0 auto; }
+.head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.head h1 { font-size: 15px; font-weight: 700; letter-spacing: 1px; }
+.head h1 .dot { color: var(--yellow); }
+.sync { display: flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 10px; color: var(--dim); }
+.sync .dot2 { width: 7px; height: 7px; border-radius: 50%; background: var(--green); box-shadow: 0 0 6px var(--green); }
+.sync .dot2.stale { background: var(--dim); box-shadow: none; }
+
+.total-card {
+  background: linear-gradient(160deg, #16202f, #101622); border: 1px solid var(--border);
+  border-radius: 14px; padding: 18px 18px 16px; margin-bottom: 12px; position: relative; overflow: hidden;
+}
+.total-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: linear-gradient(90deg, var(--yellow), var(--orange)); opacity: .7; }
+.t-label { font-family: var(--mono); font-size: 10px; color: var(--dim); letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 8px; }
+.t-value { font-family: var(--mono); font-size: 34px; font-weight: 800; color: var(--yellow); line-height: 1; }
+.t-sub { font-family: var(--mono); font-size: 11px; color: var(--dim); margin-top: 8px; }
+.t-today { font-family: var(--mono); font-size: 11px; color: var(--green); margin-top: 6px; border-top: 1px dashed #243146; padding-top: 6px; }
+.t-today b { font-size: 15px; }
+
+.stores { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px; }
+.store {
+  background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px; min-width: 0;
+}
+.s-head { display: flex; align-items: center; gap: 6px; margin-bottom: 10px; }
+.s-emoji { font-size: 15px; }
+.s-name { font-family: var(--mono); font-size: 11px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.s-item { margin-bottom: 8px; }
+.s-item:last-child { margin-bottom: 0; }
+.s-lbl { font-family: var(--mono); font-size: 9px; color: var(--dim); margin-bottom: 2px; }
+.s-val { font-family: var(--mono); font-weight: 700; line-height: 1.15; }
+.s-val.sales { font-size: 19px; color: var(--yellow); }
+.s-val.orders { font-size: 14px; color: var(--orange); }
+.s-val .unit { font-size: 9px; color: var(--dim); font-weight: 400; }
+.s-val.today { color: var(--green); font-size: 12px; }
+.s-val.dim { color: var(--dim); }
+
+.foot { text-align: center; font-family: var(--mono); font-size: 9px; color: var(--dim); margin-top: 18px; }
+.err { text-align: center; font-size: 12px; color: var(--orange); margin-top: 30px; }
+@media (max-width: 380px) {
+  .t-value { font-size: 28px; }
+  .s-val.sales { font-size: 17px; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="head">
+    <h1>美客多<span class="dot"> · </span>销售看板</h1>
+    <div class="sync"><span class="dot2" id="dot"></span><span id="updated">加载中…</span></div>
+  </div>
+
+  <div class="total-card">
+    <div class="t-label" id="tLabel">本月合计</div>
+    <div class="t-value" id="tValue">--</div>
+    <div class="t-sub" id="tSub">等待数据…</div>
+    <div class="t-today" id="tToday" style="display:none"></div>
+  </div>
+
+  <div class="stores" id="stores"></div>
+  <div class="foot">数据每 3 小时自动同步 · 仅查看</div>
+</div>
+
+<script>
+// 数据源：主工作台部署的 mercado_data.js（脚本标签跨域直读，带时间戳防缓存）
+const DATA_URL = './mercado_data.js';
+const FALLBACK_URL = 'https://3000-722e1fca54c742f58675f95053433ce4.e2b.sh2.sandbox.cloudstudio.club/mercado_data.js';
+const REFRESH_MS = 5 * 60 * 1000; // 页面每 5 分钟自动重拉
+
+function fmtUSD(n) {
+  if (n == null || isNaN(n)) return '--';
+  return 'US$' + Number(n).toLocaleString('en-US', { maximumFractionDigits: 0 });
+}
+function curMonth() {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+}
+
+function render() {
+  const d = window.MERCADO_DATA;
+  if (!d || !Array.isArray(d.stores) || !d.stores.length) {
+    document.getElementById('tSub').textContent = '暂无数据，稍后自动重试';
+    return;
+  }
+  const cur = curMonth();
+  const inCur = d.stores.filter(s => (s.month || {}).label === cur);
+  const used = inCur.length ? inCur : d.stores;
+  const totalSales = used.reduce((a, s) => a + (Number((s.month || {}).sales) || 0), 0);
+  const totalOrders = used.reduce((a, s) => a + (Number((s.month || {}).orders) || 0), 0);
+  const hasData = used.some(s => (s.month || {}).sales != null);
+  const label = (used[0].month || {}).label || cur;
+
+  document.getElementById('tLabel').textContent =
+    d.stores.length > 1 ? d.stores.length + ' 店合计 · ' + label : label;
+  document.getElementById('tValue').textContent = hasData ? fmtUSD(totalSales) : '--';
+  document.getElementById('tSub').textContent = hasData
+    ? '累计 ' + totalOrders + ' 单 · ' + used.length + ' 店' : '等待同步…';
+
+  document.getElementById('stores').innerHTML = d.stores.map(s => {
+    const m = s.month || {};
+    const t = s.today || {};
+    const ok = m.sales != null || m.orders != null;
+    const tOk = t.sales != null || t.orders != null;
+    const tTxt = tOk
+      ? fmtUSD(t.sales) + (t.orders == null ? '' : ' <span class="unit">· ' + t.orders + ' 单</span>')
+      : '--';
+    return '<div class="store">' +
+      '<div class="s-head"><span class="s-emoji">' + (s.emoji || '🏪') + '</span>' +
+      '<span class="s-name">' + (s.name || '店铺') + '</span></div>' +
+      '<div class="s-item"><div class="s-lbl">销售额 · ' + (m.label === cur ? '本月累计' : (m.label || '') + ' 累计') + '</div>' +
+      '<div class="s-val sales' + (ok ? '' : ' dim') + '">' + fmtUSD(m.sales) + '</div></div>' +
+      '<div class="s-item"><div class="s-lbl">订单数</div>' +
+      '<div class="s-val orders' + (ok ? '' : ' dim') + '">' + (m.orders == null ? '--' : m.orders) + '<span class="unit"> 单</span></div></div>' +
+      '<div class="s-item"><div class="s-lbl">今日销售(墨)</div>' +
+      '<div class="s-val today' + (tOk ? '' : ' dim') + '">' + tTxt + '</div></div>' +
+      '</div>';
+  }).join('');
+
+  // 今日(墨西哥)合计
+  const tEl = document.getElementById('tToday');
+  if (tEl) {
+    const tds = d.stores.filter(s => s.today && s.today.sales != null);
+    if (tds.length) {
+      const ts = tds.reduce((a, s) => a + (Number(s.today.sales) || 0), 0);
+      const to = tds.reduce((a, s) => a + (Number(s.today.orders) || 0), 0);
+      const day = (tds[0].today.label || '').slice(5);
+      tEl.style.display = 'block';
+      tEl.innerHTML = '今日合计' + (day ? ' (' + day + ' 墨)' : '') + '：<b>' + fmtUSD(ts) + '</b> · ' + to + ' 单';
+    } else {
+      tEl.style.display = 'none';
+    }
+  }
+
+  if (d.updatedAt) {
+    const t = new Date(d.updatedAt);
+    const p = n => String(n).padStart(2, '0');
+    document.getElementById('updated').textContent = '更新 ' + p(t.getHours()) + ':' + p(t.getMinutes());
+    document.getElementById('dot').classList.remove('stale');
+  }
+}
+
+function tryFallback(onFail) {
+  const s2 = document.createElement('script');
+  s2.src = FALLBACK_URL + '?t=' + Date.now();
+  s2.onload = () => {
+    if (window.MERCADO_DATA) render(); else onFail();
+  };
+  s2.onerror = onFail;
+  document.head.appendChild(s2);
+}
+
+function loadData() {
+  const old = document.getElementById('ds');
+  if (old) old.remove();
+  window.MERCADO_DATA = null;
+  const s = document.createElement('script');
+  s.id = 'ds';
+  s.src = DATA_URL + '?t=' + Date.now();
+  s.onload = () => {
+    if (window.MERCADO_DATA) render(); else tryFallback(showFail);
+  };
+  s.onerror = () => tryFallback(showFail);
+  document.head.appendChild(s);
+}
+
+function showFail() {
+  document.getElementById('updated').textContent = '同步失败';
+  document.getElementById('dot').classList.add('stale');
+}
+
+loadData();
+setInterval(loadData, REFRESH_MS);
+</script>
+</body>
+</html>
