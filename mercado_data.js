@@ -1,5 +1,5 @@
 // Mercado Libre CBT 全球销售后台 · 当月累计 + 当日数据（自动抓取 · 紫鸟 ZClaw 通道，每3小时）
-// 更新时间：2026-09-21T09:56:56.628+08:00（北京时间）
+// 更新时间：2026-09-21T12:13:27.786+08:00（北京时间）
 // 数据来源：https://global-selling.mercadolibre.com/metrics
 // month: 当月1日至抓取时（按墨西哥时间 UTC-6）；today: 墨西哥当天（美客多 Today 预设）
 // stale: true 表示该店本班次抓取失败，展示的是最近一次成功抓取的数值
@@ -7,7 +7,7 @@
 
 window.MERCADO_DATA = {
   demo: false,
-  updatedAt: "2026-09-21T09:56:56.628+08:00",
+  updatedAt: "2026-09-21T12:13:27.786+08:00",
   stores: [
       {
           "id": "inn",
@@ -16,13 +16,13 @@ window.MERCADO_DATA = {
           "storeId": "27846392284118",
           "month": {
               "label": "2026-09",
-              "sales": 5476,
-              "orders": 78
+              "sales": 5532,
+              "orders": 79
           },
           "today": {
               "label": "2026-09-20",
-              "sales": 224,
-              "orders": 4
+              "sales": 280,
+              "orders": 5
           }
       },
       {
@@ -32,13 +32,13 @@ window.MERCADO_DATA = {
           "storeId": "27845287373055",
           "month": {
               "label": "2026-09",
-              "sales": 3993,
-              "orders": 47
+              "sales": 4087,
+              "orders": 48
           },
           "today": {
               "label": "2026-09-20",
-              "sales": 95,
-              "orders": 1
+              "sales": 189,
+              "orders": 2
           }
       }
   ],
